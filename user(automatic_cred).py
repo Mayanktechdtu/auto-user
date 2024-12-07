@@ -201,7 +201,7 @@ def show_dashboard_1():
     st.write("Welcome to Dashboard 1!")
     
     # ADD YOUR 3000+ LINES OF DASHBOARD 1 CODE BELOW
-    import streamlit as st
+import streamlit as st
 from datetime import datetime
 import firebase_admin
 from firebase_admin import credentials, firestore
