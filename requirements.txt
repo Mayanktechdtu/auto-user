@@ -6,4 +6,12 @@ gcloud
 sseclient
 requests
 datetime
+pandas==1.5.3
+streamlit==1.25.0
+yfinance==0.2.26
+matplotlib==3.8.0
+seaborn==0.13.0
+plotly==5.17.0
+numpy==1.25.2
+
 
