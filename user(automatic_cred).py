@@ -176,16 +176,13 @@
 
 
 
-
-
-
 import streamlit as st
 from datetime import datetime
 import firebase_admin
 from firebase_admin import credentials, firestore
 import random
 import string
-import subprocess
+import importlib.util
 import os
 
 # Initialize Firebase Admin SDK using Streamlit secrets
@@ -257,17 +254,14 @@ def sign_up():
             username = client_data['username']
             password = client_data['password']
             
-            # If no password exists, generate and store it without changing login status
             if not password:
                 password = generate_random_password()
                 update_password(username, password)
             
-            # Display credentials to the user
             st.success("Login credentials retrieved successfully!")
             st.write(f"**Username**: {username}")
             st.write(f"**Password**: {password}")
 
-            # Store credentials in session state for autofill and sidebar display
             st.session_state['generated_username'] = username
             st.session_state['generated_password'] = password
             st.session_state['credentials_generated'] = True
@@ -285,24 +279,19 @@ def show_login():
         client_data = get_client_by_username(username)
         
         if client_data:
-            # Check if the user is already logged in
             if client_data['login_status'] == 1:
                 st.warning("You are already logged in on another device or session.")
-                
-                # Option to clear previous session
                 if st.button("Clear Previous Session and Login Again"):
                     update_login_status(username, 0)
                     st.info("Previous session cleared. Please click 'Login' again to continue.")
                     st.experimental_rerun()
                 return
             
-            # Verify password
             if client_data['password'] == password:
                 expiry_date = datetime.strptime(client_data['expiry_date'], '%Y-%m-%d')
                 if datetime.now() > expiry_date:
                     st.error(f"Your access expired on {expiry_date.strftime('%Y-%m-%d')}. Please contact admin.")
                 else:
-                    # Successful login and set login status to active
                     st.session_state['logged_in'] = True
                     st.session_state['username'] = client_data['username']
                     st.session_state['permissions'] = client_data['permissions']
@@ -314,7 +303,6 @@ def show_login():
         else:
             st.error("Username not found.")
 
-# Main Dashboard after login
 def main_dashboard():
     username = st.session_state.get('username', 'User')
     permissions = st.session_state.get('permissions', [])
@@ -323,29 +311,27 @@ def main_dashboard():
     st.write(f"Welcome, {username}!")
     st.write(f"Your access expires on: {expiry_date}")
 
-    st.write("### Available Dashboards")
     dashboards = {
         'Dashboard 1': 'buy signal(ema,rsi,correction dashboard).py',
         'Dashboard 2': 'Index_Analysis.py',
         'Dashboard 3': 'stock screener+historical dashboard.py'
     }
-    for dashboard, filename in dashboards.items():
-        if dashboard.lower().replace(' ', '') in permissions:
-            if st.button(f"Open {dashboard}"):
-                run_dashboard(filename)
+    selected_dashboard = st.selectbox("Select a Dashboard", list(dashboards.keys()))
+
+    if st.button("Open Selected Dashboard"):
+        if selected_dashboard.lower().replace(' ', '') in permissions:
+            load_dashboard(os.path.join("Dashboard", dashboards[selected_dashboard]))
         else:
-            st.write(f"❌ {dashboard} - No Access")
+            st.error("You do not have access to this dashboard.")
 
-# Function to dynamically run dashboard scripts
-def run_dashboard(filename):
-    dashboard_path = os.path.join("Dashboard", filename)
-    if os.path.exists(dashboard_path):
-        # Dynamically execute the selected dashboard file
-        subprocess.run(["streamlit", "run", dashboard_path])
+def load_dashboard(filepath):
+    if os.path.exists(filepath):
+        with open(filepath) as f:
+            code = f.read()
+        exec(code, globals())  # Dynamically executes the code
     else:
-        st.error(f"Dashboard file '{filename}' not found.")
+        st.error(f"Dashboard file '{filepath}' not found.")
 
-# Handle Navigation
 def handle_navigation():
     if 'logged_in' not in st.session_state:
         st.session_state['logged_in'] = False
@@ -360,6 +346,5 @@ def handle_navigation():
         else:
             show_login()
 
-# Run the user dashboard
 if __name__ == "__main__":
     handle_navigation()
