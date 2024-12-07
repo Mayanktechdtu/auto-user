@@ -134,7 +134,7 @@ def main_dashboard():
     st.write(f"Your access expires on: {expiry_date}")
 
     dashboards = {
-        'Dashboard 1': os.path.join("Dashboard", "buy signal(ema,rsi,correction dashboard).py"),
+        'Dashboard 1': os.path.join("Dashboard", "oneday_fall.py"),
         'Dashboard 2': os.path.join("Dashboard", "Index_Analysis.py"),
         'Dashboard 3': os.path.join("Dashboard", "stock screener+historical dashboard.py")
     }
