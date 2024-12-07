@@ -298,6 +298,7 @@ def show_login():
                     st.session_state['expiry_date'] = client_data['expiry_date']
                     update_login_status(username, 1)
                     st.success(f"Welcome, {username}!")
+                    st.session_state['active_dashboard'] = "main"  # Set default dashboard
             else:
                 st.error("Invalid password.")
         else:
@@ -316,11 +317,12 @@ def main_dashboard():
         'Dashboard 2': 'Index_Analysis.py',
         'Dashboard 3': 'stock screener+historical dashboard.py'
     }
+
     selected_dashboard = st.selectbox("Select a Dashboard", list(dashboards.keys()))
 
     if st.button("Open Selected Dashboard"):
         if selected_dashboard.lower().replace(' ', '') in permissions:
-            load_dashboard(os.path.join("Dashboard", dashboards[selected_dashboard]))
+            st.session_state['active_dashboard'] = selected_dashboard
         else:
             st.error("You do not have access to this dashboard.")
 
@@ -328,7 +330,7 @@ def load_dashboard(filepath):
     if os.path.exists(filepath):
         with open(filepath) as f:
             code = f.read()
-        exec(code, globals())  # Dynamically executes the code
+        exec(code, globals())
     else:
         st.error(f"Dashboard file '{filepath}' not found.")
 
@@ -336,8 +338,24 @@ def handle_navigation():
     if 'logged_in' not in st.session_state:
         st.session_state['logged_in'] = False
 
+    if 'active_dashboard' not in st.session_state:
+        st.session_state['active_dashboard'] = "main"
+
     if st.session_state['logged_in']:
-        main_dashboard()
+        if st.session_state['active_dashboard'] == "main":
+            main_dashboard()
+        else:
+            # Load the selected dashboard dynamically
+            dashboard_mapping = {
+                'Dashboard 1': 'Dashboard/buy signal(ema,rsi,correction dashboard).py',
+                'Dashboard 2': 'Dashboard/Index_Analysis.py',
+                'Dashboard 3': 'Dashboard/stock screener+historical dashboard.py'
+            }
+            filepath = dashboard_mapping.get(st.session_state['active_dashboard'])
+            if filepath:
+                load_dashboard(filepath)
+            else:
+                st.error("Invalid dashboard selection.")
     else:
         choice = st.sidebar.radio("Choose an option", ["Sign Up", "Login"])
 
@@ -348,3 +366,4 @@ def handle_navigation():
 
 if __name__ == "__main__":
     handle_navigation()
+
