@@ -16,6 +16,7 @@ def fetch_data(symbols, start_date, end_date):
         try:
             stock_data = yf.download(symbol, start=start_date, end=end_date)
             if not stock_data.empty:
+                stock_data = stock_data.dropna()  # Drop rows with NaN values
                 data[symbol] = stock_data
             else:
                 st.warning(f"No data found for {symbol}.")
@@ -24,92 +25,130 @@ def fetch_data(symbols, start_date, end_date):
     return data
 
 
+
 # Function to analyze significant falls and their aftermath
 def analyze_falls(data, days_after):
     results = []
     for symbol, df in data.items():
-        df['Fall%'] = df['Close'].pct_change() * 100
-        falls = df[df['Fall%'] <= -5]
-        for index, row in falls.iterrows():
-            after_fall_df = df.loc[index:].copy()
-            after_fall_df['Below Fall'] = after_fall_df['Close'] < row['Close']
-            continuous_fall_days = (
-                after_fall_df['Below Fall'].cumsum() - 
-                after_fall_df['Below Fall'].cumsum().where(~after_fall_df['Below Fall']).ffill().fillna(0)
-            ).max()
+        if 'Close' not in df.columns or df.empty:
+            st.warning(f"Skipping analysis for {symbol}: Missing 'Close' data.")
+            continue
+        try:
+            # Calculate daily percentage fall
+            df['Fall%'] = df['Close'].pct_change() * 100
+            falls = df[df['Fall%'] <= -5]  # Filter for falls greater than or equal to -5%
 
-            # Maximum consecutive days below fall price
-            max_days_below_fall = 0
-            count_below_fall = 0
-            for close in after_fall_df['Close']:
-                if close < row['Close']:
-                    count_below_fall += 1
-                else:
-                    count_below_fall = 0
-                max_days_below_fall = max(max_days_below_fall, count_below_fall)
+            for index, row in falls.iterrows():
+                # Dataframe for the days after the fall
+                after_fall_df = df.loc[index:].copy()
+                after_fall_df['Below Fall'] = after_fall_df['Close'] < row['Close']
 
-            percent_below_fall = ((after_fall_df['Close'].min() - row['Close']) / row['Close']) * 100
-            
-            analysis = {
-                'Symbol': symbol,
-                'Date': index,
-                'Close on Fall': row['Close'],
-                'Fall%': row['Fall%'],
-                'Continuous Fall Days': continuous_fall_days,
-                'Max Days Below Fall': max_days_below_fall,
-                'Percent Below Fall': percent_below_fall,
-                'After 1 Day': df['Close'].shift(-1).loc[index],
-                'After 1 Day % Change': ((df['Close'].shift(-1).loc[index] - row['Close']) / row['Close']) * 100,
-                'After 3 Days': df['Close'].shift(-3).loc[index],
-                'After 3 Days % Change': ((df['Close'].shift(-3).loc[index] - row['Close']) / row['Close']) * 100,
-                'After 5 Days': df['Close'].shift(-5).loc[index],
-                'After 5 Days % Change': ((df['Close'].shift(-5).loc[index] - row['Close']) / row['Close']) * 100,
-                f'After {days_after} Days': df['Close'].shift(-days_after).loc[index],
-                f'After {days_after} Days % Change': ((df['Close'].shift(-days_after).loc[index] - row['Close']) / row['Close']) * 100
-            }
-            results.append(analysis)
+                # Calculate consecutive fall days
+                continuous_fall_days = (
+                    after_fall_df['Below Fall'].cumsum() -
+                    after_fall_df['Below Fall'].cumsum().where(~after_fall_df['Below Fall']).ffill().fillna(0)
+                ).max()
+
+                # Calculate maximum days below fall price
+                max_days_below_fall = 0
+                count_below_fall = 0
+                for close in after_fall_df['Close']:
+                    if close < row['Close']:
+                        count_below_fall += 1
+                    else:
+                        count_below_fall = 0
+                    max_days_below_fall = max(max_days_below_fall, count_below_fall)
+
+                # Calculate maximum percentage below fall price
+                percent_below_fall = ((after_fall_df['Close'].min() - row['Close']) / row['Close']) * 100
+
+                # Collect analysis results
+                analysis = {
+                    'Symbol': symbol,
+                    'Date': index,
+                    'Close on Fall': row['Close'],
+                    'Fall%': row['Fall%'],
+                    'Continuous Fall Days': continuous_fall_days,
+                    'Max Days Below Fall': max_days_below_fall,
+                    'Percent Below Fall': percent_below_fall,
+                    'After 1 Day': df['Close'].shift(-1).loc[index] if index in df.index else None,
+                    'After 1 Day % Change': ((df['Close'].shift(-1).loc[index] - row['Close']) / row['Close']) * 100
+                    if index in df.index else None,
+                    'After 3 Days': df['Close'].shift(-3).loc[index] if index in df.index else None,
+                    'After 3 Days % Change': ((df['Close'].shift(-3).loc[index] - row['Close']) / row['Close']) * 100
+                    if index in df.index else None,
+                    'After 5 Days': df['Close'].shift(-5).loc[index] if index in df.index else None,
+                    'After 5 Days % Change': ((df['Close'].shift(-5).loc[index] - row['Close']) / row['Close']) * 100
+                    if index in df.index else None,
+                    f'After {days_after} Days': df['Close'].shift(-days_after).loc[index]
+                    if index in df.index else None,
+                    f'After {days_after} Days % Change': ((df['Close'].shift(-days_after).loc[index] - row['Close']) /
+                                                         row['Close']) * 100 if index in df.index else None
+                }
+                results.append(analysis)
+
+        except Exception as e:
+            st.error(f"Error analyzing {symbol}: {e}")
+
+    # Return the results as a DataFrame
     return pd.DataFrame(results)
 
-# Function to calculate maximum fall and other metrics
+
 def calculate_max_fall(data):
     results = []
     for symbol, df in data.items():
-        df['Fall%'] = df['Close'].pct_change() * 100
-        
-        max_fall_start_date = df['Close'].idxmax()
-        max_fall_start_open = df['Open'].loc[max_fall_start_date]
-        max_fall_period = df[df['Close'] < max_fall_start_open]
-        max_fall_end_date = max_fall_period.index[-1] if not max_fall_period.empty else df.index[-1]
-        max_fall_percent = ((df['Close'].loc[max_fall_end_date] - max_fall_start_open) / max_fall_start_open) * 100
-        max_fall_start_price = df['Close'].loc[max_fall_start_date]
-        max_fall_end_price = df['Close'].loc[max_fall_end_date]
-        
-        # Determine red and green candles in the max fall period
-        max_fall_period = df.loc[max_fall_start_date:max_fall_end_date]
-        red_candles = (max_fall_period['Close'] < max_fall_period['Open']).sum()
-        green_candles = (max_fall_period['Close'] > max_fall_period['Open']).sum()
+        if df.empty or 'Close' not in df.columns:
+            st.warning(f"Skipping {symbol}: No valid data for analysis.")
+            continue
 
-        # Determine maximum number of back-to-back red candles
-        max_red_streak = 0
-        current_red_streak = 0
-        for close, open_ in zip(max_fall_period['Close'], max_fall_period['Open']):
-            if close < open_:
-                current_red_streak += 1 
-                max_red_streak = max(max_red_streak, current_red_streak)
-            else:
-                current_red_streak = 0
+        try:
+            # Add a column for daily percentage fall
+            df['Fall%'] = df['Close'].pct_change() * 100
 
-        results.append({
-            'Symbol': symbol,
-            'Max Fall%': max_fall_percent,
-            'Max Fall Start Date': max_fall_start_date,
-            'Max Fall Start Price': max_fall_start_price,
-            'Max Fall End Date': max_fall_end_date,
-            'Max Fall End Price': max_fall_end_price,
-            'Red Candles': red_candles,
-            'Green Candles': green_candles,
-            'Max Red Candles': max_red_streak
-        })
+            # Find the maximum fall period
+            max_fall_start_date = df['Close'].idxmax()  # Date of the highest closing price
+            max_fall_start_price = df['Close'].loc[max_fall_start_date]
+            max_fall_period = df.loc[max_fall_start_date:]  # Data after the max price
+            max_fall_end_date = max_fall_period['Close'].idxmin()  # Date of the lowest closing price
+            max_fall_end_price = df['Close'].loc[max_fall_end_date]
+
+            # Calculate the maximum fall percentage
+            max_fall_percent = ((max_fall_end_price - max_fall_start_price) / max_fall_start_price) * 100
+
+            # Subset the DataFrame for the maximum fall period
+            max_fall_df = df.loc[max_fall_start_date:max_fall_end_date]
+
+            # Calculate the number of red and green candles during the fall period
+            red_candles = (max_fall_df['Close'] < max_fall_df['Open']).sum()
+            green_candles = (max_fall_df['Close'] > max_fall_df['Open']).sum()
+
+            # Calculate the maximum streak of consecutive red candles
+            max_red_streak = 0
+            current_red_streak = 0
+            for close, open_ in zip(max_fall_df['Close'], max_fall_df['Open']):
+                if close < open_:  # Red candle
+                    current_red_streak += 1
+                    max_red_streak = max(max_red_streak, current_red_streak)
+                else:  # Reset streak on green candle
+                    current_red_streak = 0
+
+            # Append the result for this symbol
+            results.append({
+                'Symbol': symbol,
+                'Max Fall%': max_fall_percent,
+                'Max Fall Start Date': max_fall_start_date,
+                'Max Fall Start Price': max_fall_start_price,
+                'Max Fall End Date': max_fall_end_date,
+                'Max Fall End Price': max_fall_end_price,
+                'Red Candles': red_candles,
+                'Green Candles': green_candles,
+                'Max Red Candle Streak': max_red_streak
+            })
+
+        except Exception as e:
+            st.error(f"Error analyzing max fall for {symbol}: {e}")
+
+    # Return the results as a DataFrame
     return pd.DataFrame(results)
 
 # Function to plot stock performance
