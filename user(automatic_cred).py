@@ -6,11 +6,6 @@ import random
 import string
 import os
 
-# Import dashboard modules
-from buy_signal_dashboard import show_buy_signal_dashboard
-from index_analysis import show_index_analysis_dashboard
-from stock_screener_dashboard import show_stock_screener_dashboard
-
 # Initialize Firebase Admin SDK using Streamlit secrets
 if not firebase_admin._apps:
     firebase_cred = credentials.Certificate({
@@ -139,9 +134,9 @@ def main_dashboard():
     st.write(f"Your access expires on: {expiry_date}")
 
     dashboards = {
-        'Dashboard 1': 'buy_signal_dashboard',
-        'Dashboard 2': 'index_analysis',
-        'Dashboard 3': 'stock_screener_dashboard'
+        'Dashboard 1': os.path.join("Dashboard", "buy signal(ema,rsi,correction dashboard).py"),
+        'Dashboard 2': os.path.join("Dashboard", "Index_Analysis.py"),
+        'Dashboard 3': os.path.join("Dashboard", "stock screener+historical dashboard.py")
     }
 
     selected_dashboard = st.radio("Available Dashboards", list(dashboards.keys()))
@@ -151,6 +146,25 @@ def main_dashboard():
             st.session_state['active_dashboard'] = dashboards[selected_dashboard]
         else:
             st.error("You do not have access to this dashboard.")
+
+def load_dashboard(filepath):
+    # Check if the file exists
+    if not os.path.exists(filepath):
+        st.error(f"Error: The dashboard file '{filepath}' does not exist.")
+        return
+
+    try:
+        # Display the loading message
+        st.write(f"Loading {filepath}...")
+
+        # Read and execute the file
+        with open(filepath, 'r') as file:
+            code = file.read()
+        exec(code, globals())  # Execute the dashboard script
+
+    except Exception as e:
+        # Catch and display any errors during execution
+        st.error(f"An error occurred while loading the dashboard: {e}")
 
 def handle_navigation():
     if 'logged_in' not in st.session_state:
@@ -163,14 +177,8 @@ def handle_navigation():
         if st.session_state['active_dashboard'] == "main":
             main_dashboard()
         else:
-            if st.session_state['active_dashboard'] == 'buy_signal_dashboard':
-                show_buy_signal_dashboard()
-            elif st.session_state['active_dashboard'] == 'index_analysis':
-                show_index_analysis_dashboard()
-            elif st.session_state['active_dashboard'] == 'stock_screener_dashboard':
-                show_stock_screener_dashboard()
-            else:
-                st.error("Invalid dashboard selected.")
+            filepath = st.session_state['active_dashboard']
+            load_dashboard(filepath)
     else:
         choice = st.sidebar.radio("Choose an option", ["Sign Up", "Login"])
 
