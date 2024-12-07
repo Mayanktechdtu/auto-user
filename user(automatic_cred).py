@@ -175,14 +175,12 @@
 #     handle_navigation()
 
 
-
 import streamlit as st
 from datetime import datetime
 import firebase_admin
 from firebase_admin import credentials, firestore
 import random
 import string
-import importlib.util
 import os
 
 # Initialize Firebase Admin SDK using Streamlit secrets
@@ -298,7 +296,7 @@ def show_login():
                     st.session_state['expiry_date'] = client_data['expiry_date']
                     update_login_status(username, 1)
                     st.success(f"Welcome, {username}!")
-                    st.session_state['active_dashboard'] = "main"  # Set default dashboard
+                    st.session_state['active_dashboard'] = "main"  # Default dashboard
             else:
                 st.error("Invalid password.")
         else:
@@ -313,26 +311,23 @@ def main_dashboard():
     st.write(f"Your access expires on: {expiry_date}")
 
     dashboards = {
-        'Dashboard 1': 'buy signal(ema,rsi,correction dashboard).py',
-        'Dashboard 2': 'Index_Analysis.py',
-        'Dashboard 3': 'stock screener+historical dashboard.py'
+        'Dashboard 1': 'Dashboard/buy signal(ema,rsi,correction dashboard).py',
+        'Dashboard 2': 'Dashboard/Index_Analysis.py',
+        'Dashboard 3': 'Dashboard/stock screener+historical dashboard.py'
     }
 
-    selected_dashboard = st.selectbox("Select a Dashboard", list(dashboards.keys()))
+    selected_dashboard = st.radio("Available Dashboards", list(dashboards.keys()))
 
     if st.button("Open Selected Dashboard"):
         if selected_dashboard.lower().replace(' ', '') in permissions:
-            st.session_state['active_dashboard'] = selected_dashboard
+            st.session_state['active_dashboard'] = dashboards[selected_dashboard]
         else:
             st.error("You do not have access to this dashboard.")
 
 def load_dashboard(filepath):
-    if os.path.exists(filepath):
-        with open(filepath) as f:
-            code = f.read()
-        exec(code, globals())
-    else:
-        st.error(f"Dashboard file '{filepath}' not found.")
+    st.write(f"Loading {filepath}...")
+    # Load the corresponding dashboard
+    exec(open(filepath).read(), globals())
 
 def handle_navigation():
     if 'logged_in' not in st.session_state:
@@ -345,17 +340,8 @@ def handle_navigation():
         if st.session_state['active_dashboard'] == "main":
             main_dashboard()
         else:
-            # Load the selected dashboard dynamically
-            dashboard_mapping = {
-                'Dashboard 1': 'Dashboard/buy signal(ema,rsi,correction dashboard).py',
-                'Dashboard 2': 'Dashboard/Index_Analysis.py',
-                'Dashboard 3': 'Dashboard/stock screener+historical dashboard.py'
-            }
-            filepath = dashboard_mapping.get(st.session_state['active_dashboard'])
-            if filepath:
-                load_dashboard(filepath)
-            else:
-                st.error("Invalid dashboard selection.")
+            filepath = st.session_state['active_dashboard']
+            load_dashboard(filepath)
     else:
         choice = st.sidebar.radio("Choose an option", ["Sign Up", "Login"])
 
